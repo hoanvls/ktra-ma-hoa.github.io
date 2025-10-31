@@ -1,0 +1,306 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Tra cứu Biển nhận dạng — XN QLVH</title>
+  <style>
+    :root{
+      --blue:#005BAC;
+      --blue-2:#0073e6;
+      --muted:#6b7280;
+    }
+    body{
+      font-family: "Segoe UI", Roboto, Arial, sans-serif;
+      background:#f4f6fa;
+      margin:0; padding:20px;
+      color:#1f2937;
+    }
+    .container{
+      max-width:740px;
+      margin:36px auto;
+      background:#fff;
+      border-radius:12px;
+      padding:26px;
+      box-shadow:0 8px 30px rgba(2,6,23,0.06);
+    }
+    h1{
+      font-size:18px;
+      margin:0 0 12px 0;
+      color:var(--blue);
+      font-weight:700;
+      display:flex; align-items:center; gap:10px;
+    }
+    .sub { color:var(--muted); font-size:13px; margin-bottom:16px; text-align:center; }
+    .search-row{ display:flex; gap:10px; align-items:center; position:relative; }
+    input[type="text"]{
+      flex:1;
+      padding:12px 14px;
+      font-size:15px;
+      border-radius:10px;
+      border:2px solid var(--blue);
+      outline:none;
+      transition:box-shadow .18s, border-color .18s;
+    }
+    input[type="text"]:focus{ box-shadow:0 6px 18px rgba(0,91,172,0.16); border-color:var(--blue-2); }
+    button.btn{
+      background:var(--blue); color:#fff; border:0; padding:11px 18px; border-radius:10px;
+      cursor:pointer; font-weight:600;
+    }
+    button.btn:disabled{ opacity:0.55; cursor:not-allowed; }
+    ul.suggestions{
+      position:absolute; top:52px; left:0; right:120px;
+      background:#fff; border-radius:10px; border:1px solid #e6eefc;
+      box-shadow:0 6px 18px rgba(3,56,144,0.06);
+      max-height:240px; overflow:auto; z-index:30; display:none; padding:6px;
+    }
+    ul.suggestions li{ padding:10px 12px; cursor:pointer; border-radius:8px; font-size:14px; color:#0f172a;}
+    ul.suggestions li:hover{ background:#eef6ff; }
+    .result, .multi-result{
+      margin-top:18px; border-radius:10px; padding:14px; background:#f0f6ff; border:1px solid #d6eaff;
+      box-shadow:0 3px 8px rgba(3,56,144,0.03);
+    }
+    .result p{ margin:8px 0; font-size:15px; }
+    table{ width:100%; border-collapse:collapse; margin-top:8px; }
+    th, td{ padding:10px 8px; text-align:left; border-bottom:1px solid #e9f2ff; font-size:14px; }
+    th{ color:#0b3a66; font-weight:700; background:transparent; }
+    .meta{ margin-top:10px; color:var(--muted); font-size:13px; text-align:center; }
+    .footer-note{ text-align:center; margin-top:14px; font-size:13px; color:var(--muted); }
+    @media (max-width:720px){
+      .container{ margin:18px 12px; padding:18px; }
+      ul.suggestions{ right:0; top:auto; position:relative; margin-top:8px; }
+      .search-row{ flex-direction:column; align-items:stretch; }
+      button.btn{ width:100%; }
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>🔎 TRA CỨU BIỂN MÃ HÓA</h1>
+    <div class="sub">XN QLVH đường Cao tốc Bắc Giang - Lạng Sơn</div>
+
+    <div class="search-row">
+      <input id="searchInput" type="text" placeholder="Nhập Biển nhận dạng hoặc Mã EPC..." disabled />
+      <button id="btnSearch" class="btn" disabled>Tìm</button>
+      <ul id="suggestions" class="suggestions" role="listbox"></ul>
+    </div>
+
+    <div id="status" class="meta">Đang tải dữ liệu...</div>
+
+    <!-- Khi chỉ 1 kết quả -->
+    <div id="resultBox" class="result" style="display:none;">
+      <p><strong>Mã EPC:</strong> <span id="maEpc"></span></p>
+      <p><strong>Biển nhận dạng:</strong> <span id="bien"></span></p>
+      <p><strong>Biển mã hoá:</strong> <span id="enc"></span></p>
+    </div>
+
+    <!-- Khi nhiều kết quả -->
+    <div id="multiBox" class="multi-result" style="display:none;">
+      <div id="multiHeader" style="font-weight:600; margin-bottom:8px;"></div>
+      <div style="overflow:auto"><table id="multiTable">
+        <thead><tr><th style="width:32%">Mã EPC</th><th style="width:36%">Biển nhận dạng</th><th style="width:32%">Biển mã hoá</th></tr></thead>
+        <tbody></tbody>
+      </table></div>
+    </div>
+
+    <div id="notFound" style="display:none; margin-top:14px; text-align:center; color:#b45309; font-weight:600;"></div>
+
+    <div class="footer-note">Dữ liệu lấy trực tiếp từ Google Sheets (Sheet1)</div>
+  </div>
+
+  <script>
+    // CONFIG: sheet id + sheet name
+    const SHEET_ID = "1kZy7OsYYPSOtHToEjUREGRbTyqRBrSe1AQ_kdL8X_bw";
+    const SHEET_NAME = "Sheet1";
+    const SHEET_URL = `https://docs.google.com/spreadsheets/d/${SHEET_ID}/gviz/tq?tqx=out:json&sheet=${SHEET_NAME}`;
+
+    // DOM
+    const inputEl = document.getElementById('searchInput');
+    const btnSearch = document.getElementById('btnSearch');
+    const suggestionsEl = document.getElementById('suggestions');
+    const statusEl = document.getElementById('status');
+    const resultBox = document.getElementById('resultBox');
+    const maEpcEl = document.getElementById('maEpc');
+    const bienEl = document.getElementById('bien');
+    const encEl = document.getElementById('enc');
+    const multiBox = document.getElementById('multiBox');
+    const multiTableBody = document.querySelector('#multiTable tbody');
+    const multiHeader = document.getElementById('multiHeader');
+    const notFoundEl = document.getElementById('notFound');
+
+    let sheetData = []; // {MaEPC, BienNhanDang, BienMaHoa}
+    let loaded = false;
+
+    // Normalize: remove diacritics, toLowerCase, keep only a-z0-9 (remove spaces/punct)
+    function normalizePlate(s){
+      if(!s && s !== 0) return '';
+      const str = String(s).normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+      return str.toLowerCase().replace(/[^a-z0-9]/g,'');
+    }
+
+    // Load sheet data safely (handle r.c possibly null)
+    async function loadData(){
+      try{
+        statusEl.textContent = 'Đang tải dữ liệu...';
+        const res = await fetch(SHEET_URL, {cache:'no-store'});
+        if(!res.ok) throw new Error('HTTP '+res.status);
+        const text = await res.text();
+        // Strip wrapper from gviz response
+        const json = JSON.parse(text.substring(text.indexOf('(')+1, text.lastIndexOf(')')));
+        const rows = (json.table && json.table.rows) || [];
+        sheetData = rows.map(r => ({
+          MaEPC: (r.c && r.c[0] && r.c[0].v) || '',
+          BienNhanDang: (r.c && r.c[1] && r.c[1].v) || '',
+          BienMaHoa: (r.c && r.c[2] && r.c[2].v) || ''
+        }));
+        loaded = true;
+        statusEl.textContent = `Đã tải ${sheetData.length} bản ghi. Tìm khi gõ hoặc nhấn Tìm.`;
+        inputEl.disabled = false;
+        btnSearch.disabled = false;
+      }catch(err){
+        console.error('loadData error', err);
+        statusEl.textContent = 'Không thể tải dữ liệu. Kiểm tra quyền chia sẻ của Google Sheet.';
+        inputEl.disabled = true;
+        btnSearch.disabled = true;
+      }
+    }
+
+    // Render single result
+    function showSingle(item){
+      multiBox.style.display = 'none';
+      notFoundEl.style.display = 'none';
+      maEpcEl.textContent = item.MaEPC || '-';
+      bienEl.textContent = item.BienNhanDang || '-';
+      encEl.textContent = item.BienMaHoa || '-';
+      resultBox.style.display = 'block';
+    }
+
+    // Render multiple results (table)
+    function showMultiple(items, q){
+      resultBox.style.display = 'none';
+      notFoundEl.style.display = 'none';
+      multiTableBody.innerHTML = '';
+      multiHeader.textContent = `Tìm thấy ${items.length} kết quả cho "${q}" (hiển thị tối đa 100).`;
+      const maxShow = Math.min(items.length, 100);
+      for(let i=0;i<maxShow;i++){
+        const r = items[i];
+        const tr = document.createElement('tr');
+        tr.innerHTML = `<td>${escapeHtml(r.MaEPC)}</td><td>${escapeHtml(r.BienNhanDang)}</td><td>${escapeHtml(r.BienMaHoa)}</td>`;
+        tr.style.cursor = 'pointer';
+        // click row => show single
+        tr.addEventListener('click', ()=> showSingle(r));
+        multiTableBody.appendChild(tr);
+      }
+      multiBox.style.display = 'block';
+    }
+
+    function showNotFound(q){
+      resultBox.style.display = 'none';
+      multiBox.style.display = 'none';
+      notFoundEl.style.display = 'block';
+      notFoundEl.textContent = `Không tìm thấy kết quả cho "${q}".`;
+    }
+
+    function escapeHtml(s){ return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+
+    // Search logic: try exact normalized match first, then contains (on Bien, EPC, Enc)
+    function performSearch(){
+      if(!loaded){ statusEl.textContent = 'Dữ liệu chưa sẵn sàng. Vui lòng đợi.'; return; }
+      const raw = inputEl.value || '';
+      const qRaw = raw.trim();
+      const q = normalizePlate(qRaw);
+      if(q===''){ statusEl.textContent = 'Vui lòng nhập từ khóa để tìm.'; return; }
+
+      // exact match on any field
+      const exact = sheetData.find(it => normalizePlate(it.BienNhanDang) === q || normalizePlate(it.MaEPC) === q || normalizePlate(it.BienMaHoa) === q);
+      if(exact){
+        showSingle(exact);
+        statusEl.textContent = `Tìm thấy 1 kết quả (khớp chính xác).`;
+        return;
+      }
+
+      // contains match
+      const matches = sheetData.filter(it=>{
+        const a = normalizePlate(it.BienNhanDang);
+        const b = normalizePlate(it.MaEPC);
+        const c = normalizePlate(it.BienMaHoa);
+        return (a && a.includes(q)) || (b && b.includes(q)) || (c && c.includes(q));
+      });
+
+      if(matches.length === 0){
+        showNotFound(qRaw);
+        statusEl.textContent = `0 kết quả.`;
+      } else if(matches.length === 1){
+        showSingle(matches[0]);
+        statusEl.textContent = `Tìm thấy 1 kết quả (khớp chứa).`;
+      } else {
+        showMultiple(matches, qRaw);
+        statusEl.textContent = `Tìm thấy ${matches.length} kết quả (khớp chứa).`;
+      }
+    }
+
+    // Auto-suggestions (visible when typing)
+    let sugTimer = null;
+    inputEl.addEventListener('input', ()=>{
+      clearTimeout(sugTimer);
+      suggestionsEl.innerHTML = '';
+      suggestionsEl.style.display = 'none';
+      const qRaw = inputEl.value || '';
+      const q = normalizePlate(qRaw);
+      if(!q || !loaded) return;
+      // debounce
+      sugTimer = setTimeout(()=>{
+        // get unique suggestions from BienNhanDang that contain q (normalized)
+        const seen = new Set();
+        const hits = [];
+        for(let i=0;i<sheetData.length && hits.length < 30; i++){
+          const item = sheetData[i];
+          const n = normalizePlate(item.BienNhanDang);
+          if(n && n.includes(q) && !seen.has(n)){
+            seen.add(n);
+            hits.push(item);
+          }
+        }
+        if(hits.length === 0) return;
+        // show up to 10
+        suggestionsEl.innerHTML = '';
+        hits.slice(0,10).forEach(h=>{
+          const li = document.createElement('li');
+          li.textContent = h.BienNhanDang || '(không tên)';
+          li.title = `${h.BienNhanDang} — ${h.MaEPC}`;
+          li.addEventListener('click', ()=>{
+            inputEl.value = h.BienNhanDang || '';
+            suggestionsEl.style.display = 'none';
+            performSearch();
+          });
+          suggestionsEl.appendChild(li);
+        });
+        suggestionsEl.style.display = 'block';
+      }, 120);
+    });
+
+    // Enter key or button triggers search
+    inputEl.addEventListener('keydown', (e)=>{
+      if(e.key === 'Enter'){
+        e.preventDefault();
+        suggestionsEl.style.display = 'none';
+        performSearch();
+      }
+    });
+    btnSearch.addEventListener('click', ()=>{
+      suggestionsEl.style.display = 'none';
+      performSearch();
+    });
+
+    // Hide suggestions when clicking outside
+    document.addEventListener('click', (e)=>{
+      if(!e.target.closest('.search-row')){
+        suggestionsEl.style.display = 'none';
+      }
+    });
+
+    // Init
+    loadData();
+  </script>
+</body>
+</html>
